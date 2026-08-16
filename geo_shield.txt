@@ -1,0 +1,40 @@
+import sys
+import traceback
+import os
+
+def auto_repair_app_code():
+    """INTERNAL HEALER: Automatically scans and patches known layout bugs."""
+    target = "geo_core.txt"
+    if not os.path.exists(target):
+        return
+        
+    with open(target, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    was_patched = False
+
+    # Auto-fix global scope placement
+    if "def search_assistant(user_input):" in content:
+        if "global SORTED_KEYS_BY_LEN" not in content.split("def search_assistant(user_input):").split("\n"):
+            content = content.replace("global SORTED_KEYS_BY_LEN\n", "").replace("global SORTED_KEYS_BY_LEN", "")
+            content = content.replace(
+                "def search_assistant(user_input):",
+                "def search_assistant(user_input):\n    global SORTED_KEYS_BY_LEN"
+            )
+            was_patched = True
+
+    if was_patched:
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(content)
+        print("\n🩹 [AUTO-HEALER SHIELD]: Synchronized internal structural formats.")
+
+def master_fail_safe_boot():
+    print("============================================================")
+    print("🛡️  CRITICAL PROTECTION LAYER ENGINE: INITIALIZING BOOT LOAD")
+    print("============================================================")
+    
+    auto_repair_app_code()
+    
+    try:
+        with open("geo_core.py", "r", encoding="utf-8") as f:
+            code_content = f.read()
