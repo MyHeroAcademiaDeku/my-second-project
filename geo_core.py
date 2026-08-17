@@ -7,10 +7,14 @@ import urllib.error
   
 DATA_FILE = "geo_data.json"  
   
-# Swap this for any OpenRouter model id; ":free" models cost nothing.  
+# Browser-like header to reduce bot-blocking (Cloudflare error 1010, etc.)  
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "  
+              "AppleWebKit/537.36 (KHTML, like Gecko) "  
+              "Chrome/125.0.0.0 Safari/537.36")  
+  
 OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  
   
-# These curated terms are the ONLY keys that return a [Local File Answer].  
+# Curated offline dictionary (instant, no network). Cached web answers do NOT go here.  
 CURATED_TERMS = {  
     "causes": "forces producing effect", "difference": "way things differ",  
     "instrument": "measuring tool", "measures": "checking a metric",  
@@ -56,73 +60,81 @@ CURATED_TERMS = {
     "tundra": "treeless frozen Arctic plain", "weather": "short-term atmosphere conditions"  
 }  
   
-# Working copy (may be extended by geo_data.json, but only CURATED_TERMS give [Local File Answer]).  
-geo_dictionary = dict(CURATED_TERMS)  
+SORTED_KEYS_BY_LEN = sorted(CURATED_TERMS.keys(), key=len, reverse=True)  
   
-def load_database():  
+  
+def load_cache():  
     if os.path.exists(DATA_FILE):  
         try:  
-            with open(DATA_FILE, "r", encoding="utf-8") as f: return json.load(f)  
-        except Exception: return {}  
+            with open(DATA_FILE, "r", encoding="utf-8") as f:  
+                return json.load(f)  
+        except Exception:  
+            return {}  
     return {}  
   
-def save_database(db):  
-    with open(DATA_FILE, "w", encoding="utf-8") as f: json.dump(db, f, indent=4, ensure_ascii=False)  
   
-if not os.path.exists(DATA_FILE): save_database(geo_dictionary)  
-else: geo_dictionary.update(load_database())  
-SORTED_KEYS_BY_LEN = sorted(CURATED_TERMS.keys(), key=len, reverse=True)  
+def save_cache(db):  
+    with open(DATA_FILE, "w", encoding="utf-8") as f:  
+        json.dump(db, f, indent=4, ensure_ascii=False)  
+  
   
 def run_full_system_audit():  
     print("\n🔍 RUNNING FULL SYSTEM HEALTH CHECK...\n" + "=" * 60)  
     issues_found = 0  
     try:  
-        with open(DATA_FILE, "r", encoding="utf-8") as f: json.load(f)  
-        print("✅ [Storage Subsystem]: Healthy. Database parsing verified.")  
-    except Exception as e: issues_found += 1; print(f"❌ [Storage Subsystem]: Corrupt. Error: {e}")  
-    try:  
         parsed = urllib.parse.urlparse("https://en.wikipedia.org/w/api.php")  
-        if not parsed.scheme or not parsed.netloc: raise ValueError("Malformed components.")  
+        if not parsed.scheme or not parsed.netloc:  
+            raise ValueError("Malformed components.")  
         print("✅ [Network Construction]: Healthy. Routing parameters secure.")  
-    except Exception as e: issues_found += 1; print(f"❌ [Network Construction]: Malformed. Error: {e}")  
+    except Exception as e:  
+        issues_found += 1  
+        print(f"❌ [Network Construction]: Malformed. Error: {e}")  
     try:  
-        if len(geo_dictionary) == 0: raise ValueError("Zero definitions map loaded.")  
-        print("✅ [Memory Subsystem]: Healthy. Geographic memory variables initialized.")  
-    except Exception as e: issues_found += 1; print(f"❌ [Memory Subsystem]: Config failure. Error: {e}")  
+        if len(CURATED_TERMS) == 0:  
+            raise ValueError("Zero definitions map loaded.")  
+        print("✅ [Memory Subsystem]: Healthy. Definition variables initialized.")  
+    except Exception as e:  
+        issues_found += 1  
+        print(f"❌ [Memory Subsystem]: Config failure. Error: {e}")  
     print("=" * 60)  
-    if issues_found == 0: print("🚀 ALL SYSTEMS NOMINAL: Application engine safe to initialize.")  
-    else: print(f"⚠️ AUDIT COMPLETE: Found {issues_found} distinct problems.")  
+    if issues_found == 0:  
+        print("🚀 ALL SYSTEMS NOMINAL: Application engine safe to initialize.")  
+    else:  
+        print(f"⚠️ AUDIT COMPLETE: Found {issues_found} distinct problems.")  
     print("=" * 60 + "\n")  
+  
   
 def looks_like_math(question):  
     q = question.lower()  
-    if re.search(r'\d\s*[\+\-\*/x=]\s*\d', q): return True  
+    if re.search(r'\d\s*[\+\-\*/x=]\s*\d', q):  
+        return True  
     keywords = ["solve", "calculate", "equation", "derivative", "integral",  
-                "simplify", "factor", "evaluate", "what is", "how much is"]  
-    if any(k in q for k in keywords) and re.search(r'\d', q): return True  
-    return False  
+                "simplify", "factor", "evaluate"]  
+    return any(k in q for k in keywords)  
+  
   
 def ask_llm(question):  
-    """Primary route: OpenRouter (OpenAI-compatible). Short answers, or detailed for math."""  
+    """Primary route: OpenRouter (OpenAI-compatible). Short answers, detailed for math."""  
     key = os.environ.get("OPENROUTER_API_KEY", "")  
     if not key:  
         print("   [LLM debug] No OPENROUTER_API_KEY set.")  
         return None  
   
     if looks_like_math(question):  
-        system_prompt = ("You are a careful math tutor. Solve the problem step by step, "  
-                         "showing your reasoning clearly, and end with a line starting "  
-                         "with 'Answer:' giving the final result.")  
+        system_msg = ("You are a math tutor. Solve the problem with clear, "  
+                      "step-by-step working, and end with a line beginning 'Answer:'.")  
+        label = "[Math Solution]"  
     else:  
-        system_prompt = ("You are a concise assistant. Answer in one short, direct sentence "  
-                         "with no extra explanation.")  
+        system_msg = ("Answer in a single short, direct sentence. "  
+                      "No preamble, no extra detail.")  
+        label = "[AI Answer]"  
   
     payload = json.dumps({  
         "model": OPENROUTER_MODEL,  
         "messages": [  
-            {"role": "system", "content": system_prompt},  
-            {"role": "user", "content": question.strip()}  
-        ]  
+            {"role": "system", "content": system_msg},  
+            {"role": "user", "content": question},  
+        ],  
     }).encode("utf-8")  
   
     req = urllib.request.Request(  
@@ -131,46 +143,49 @@ def ask_llm(question):
     )  
     req.add_header("Authorization", f"Bearer {key}")  
     req.add_header("Content-Type", "application/json")  
+    req.add_header("User-Agent", BROWSER_UA)          # <-- added  
+    req.add_header("Accept", "application/json")       # <-- added  
   
     try:  
         with urllib.request.urlopen(req, timeout=30) as response:  
             data = json.loads(response.read().decode("utf-8"))  
-            return data["choices"][0]["message"]["content"].strip()  
+            answer = data["choices"][0]["message"]["content"].strip()  
+            return f"{label}\n{answer}"  
     except urllib.error.HTTPError as e:  
-        try: body = e.read().decode("utf-8")  
-        except Exception: body = ""  
+        try:  
+            body = e.read().decode("utf-8")  
+        except Exception:  
+            body = ""  
         print(f"   [LLM debug] HTTP {e.code}: {body}")  
         return None  
     except Exception as e:  
         print(f"   [LLM debug] {type(e).__name__}: {e}")  
         return None  
   
-def fetch_live_online_answer(query_phrase):  
-    """Wikipedia fallback: correct MediaWiki endpoint, JSON-parsed so accents render right."""  
+  
+def ask_wikipedia(query_phrase):  
+    """Fallback route: Wikipedia MediaWiki API, parsed with json.loads (accent-safe)."""  
     clean_query = re.sub(r'[^a-zA-Z0-9 ]', '', query_phrase).strip()  
     safe_query = urllib.parse.quote(clean_query)  
-  
     url = (  
-        f"https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2"  
-        f"&prop=extracts&exintro=1&explaintext=1&generator=search"  
-        f"&gsrsearch={safe_query}&gsrlimit=1"  
+        "https://en.wikipedia.org/w/api.php?action=query&format=json"  
+        "&formatversion=2&prop=extracts&exintro=1&explaintext=1"  
+        f"&generator=search&gsrsearch={safe_query}&gsrlimit=1"  
     )  
-  
     try:  
         req = urllib.request.Request(url)  
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')  
-        req.add_header('Accept', 'application/json')  
-  
-        with urllib.request.urlopen(req, timeout=8) as response:  
+        req.add_header("User-Agent", BROWSER_UA)       # <-- added  
+        req.add_header("Accept", "application/json")  
+        with urllib.request.urlopen(req, timeout=15) as response:  
             raw_bytes = response.read()  
             if not raw_bytes:  
                 print("   [Wiki debug] empty body")  
                 return None  
-            data = json.loads(raw_bytes.decode('utf-8'))  
+            data = json.loads(raw_bytes.decode("utf-8"))  
             pages = data.get("query", {}).get("pages", [])  
             if pages and pages[0].get("extract"):  
-                return pages[0]["extract"].strip()  
-            print("   [Wiki debug] no extract found")  
+                return f"[Wikipedia Answer]:\n{pages[0]['extract'].strip()}"  
+            print("   [Wiki debug] no extract match")  
             return None  
     except urllib.error.HTTPError as e:  
         print(f"   [Wiki debug] HTTP {e.code}")  
@@ -179,59 +194,63 @@ def fetch_live_online_answer(query_phrase):
         print(f"   [Wiki debug] {type(e).__name__}: {e}")  
         return None  
   
-def clean_input(txt): return re.sub(r'[?.!,]', '', txt.lower().strip())  
+  
+def clean_input(txt):  
+    return re.sub(r'[?.!,]', '', txt.lower().strip())  
+  
   
 def search_assistant(user_input):  
     try:  
         cleaned = clean_input(user_input)  
-        if not cleaned: return "Please ask a question."  
+        if not cleaned:  
+            return "Please ask a question."  
   
-        # 1) Curated local dictionary only (no cached web answers shadow the LLM).  
-        if cleaned in CURATED_TERMS: return f"[Local File Answer]:\n{CURATED_TERMS[cleaned]}"  
+        # 1) Curated local dictionary only (cached web answers can't shadow the LLM).  
+        if cleaned in CURATED_TERMS:  
+            return f"[Local File Answer]:\n{CURATED_TERMS[cleaned]}"  
         for key in SORTED_KEYS_BY_LEN:  
-            if " " in key and key in cleaned: return f"[Local File Answer]:\n{CURATED_TERMS[key]}"  
+            if " " in key and key in cleaned:  
+                return f"[Local File Answer]:\n{CURATED_TERMS[key]}"  
   
-        # 2) LLM primary route (short answers; detailed for math).  
+        # 2) Primary online route: LLM.  
         print("\n[Thinking] Contacting the general knowledge model...")  
-        answer = ask_llm(user_input)  
-        if answer:  
-            label = "[Math Solution]" if looks_like_math(user_input) else "[AI Answer]"  
-            return f"{label}\n{answer}"  
+        llm = ask_llm(user_input)  
+        if llm:  
+            return llm  
   
-        # 3) Wikipedia fallback.  
-        print("[Fallback] Model unavailable, trying Wikipedia...")  
-        wiki = fetch_live_online_answer(cleaned)  
+        # 3) Fallback: Wikipedia.  
+        print("[Fallback] Model unavailable, trying Wikipedia...\n")  
+        wiki = ask_wikipedia(cleaned)  
         if wiki:  
-            return f"[Wikipedia Answer]:\n{wiki}"  
+            return wiki  
   
-        # 4) Offline fuzzy match.  
-        helpers = ["is", "what", "in", "to", "of", "the", "on", "or", "it", "a", "an",  
-                   "how", "and", "does", "its", "at"]  
-        processed_words, matched_concepts = set(), []  
+        # 4) Offline fuzzy match on curated terms.  
+        helpers = {"is", "what", "in", "to", "of", "the", "on", "or", "it", "a",  
+                   "an", "how", "and", "does", "its", "at", "capital", "country"}  
+        matched = []  
         for word in cleaned.split():  
-            if word in helpers or word in processed_words: continue  
-            best_match, lowest_dist = None, 999  
+            if word in helpers:  
+                continue  
+            best, lowest = None, 999  
             for key in CURATED_TERMS:  
-                if key in helpers or " " in key: continue  
+                if key in helpers or " " in key:  
+                    continue  
                 len_diff = abs(len(word) - len(key))  
-                shorter_len = min(len(word), len(key))  
-                mismatches = sum(1 for i in range(shorter_len) if word[i] != key[i])  
-                total_dist = len_diff + mismatches  
-                if total_dist < lowest_dist: lowest_dist, best_match = total_dist, key  
-            if best_match and lowest_dist <= (1 if len(word) <= 5 else 3):  
-                matched_concepts.append((best_match, CURATED_TERMS[best_match]))  
-            processed_words.add(word)  
-  
-        if matched_concepts:  
-            if len(matched_concepts) == 1:  
-                mw, d = matched_concepts.pop(0)  
-                return f"[Human Analysis Local]: '{mw}' refers to {d}."  
-            summary = ", ".join([f"'{k}' ({v})" for k, v in matched_concepts])  
-            return f"[Human Analysis Local]: Found multiple matching concepts: {summary}"  
+                shorter = min(len(word), len(key))  
+                mism = sum(1 for i in range(shorter) if word[i] != key[i])  
+                dist = len_diff + mism  
+                if dist < lowest:  
+                    lowest, best = dist, key  
+            if best and lowest <= (1 if len(word) <= 5 else 3):  
+                matched.append((best, CURATED_TERMS[best]))  
+        if matched:  
+            b, d = matched[0]  
+            return f"[Human Analysis Local]: '{b}' refers to {d}."  
   
         return f"[Notice] Could not find an answer for: '{cleaned}'"  
-    except Exception as general_error:  
-        return f"[System Alert]: Internal loop processing error caught safely: {general_error}"  
+    except Exception as e:  
+        return f"[System Alert]: Internal loop error caught safely: {e}"  
+  
   
 if __name__ == "__main__":  
     run_full_system_audit()  
@@ -240,5 +259,7 @@ if __name__ == "__main__":
     print("==============================================")  
     while True:  
         q = input("\nAsk me anything (or type 'exit'): ")  
-        if q.lower() == 'exit': break  
-        if q.strip(): print(f"\n{search_assistant(q)}")
+        if q.lower() == "exit":  
+            break  
+        if q.strip():  
+            print(f"\n{search_assistant(q)}")
