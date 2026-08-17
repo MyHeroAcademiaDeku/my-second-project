@@ -1,99 +1,114 @@
-import sys
-import os
-import json
-import urllib.request
-import urllib.parse
-
-TARGET = "geo_core.txt"
-
-def force_live_ram_patch(user_sentence, scope_memory):
-    """Bypasses permanent data loops by locking the memory functions into an open AI stream model."""
-    print("\n🤖 [AI LIVE MEMORY HEALER]: Initializing open dynamic text lookup layer...")
-    print("Code injection routine is applying a permanent AI execution gateway straight to RAM...")
-    
-    # Overwrites the loop and injects an unlocked public proxy search scraper
-    final_execution_block = """
-def fetch_live_online_answer(query_phrase):
-    # Clean up input strings to preserve standard spacing for the web API
-    safe_query = urllib.parse.quote(query_phrase.strip())
-    url = f"https://pollinations.ai{safe_query}"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12) as response:
-            raw_text = response.read().decode('utf-8').strip()
-            if raw_text and "error" not in raw_text.lower() and len(raw_text) > 5:
-                return raw_text
-    except Exception: pass
-    return None
-
-def search_assistant(user_input):
-    global SORTED_KEYS_BY_LEN
-    try:
-        cleaned = re.sub(r'[?.!,]', '', user_input.lower().strip())
-        if not cleaned: return "Please ask a question containing geography terms."
-        if cleaned in geo_dictionary: return f"[Local File Answer]:\\n{geo_dictionary[cleaned]}"
-        
-        # ADVANCED STRIPPER: Cuts out sentence clutter to isolate the absolute target noun
-        helpers = ["is", "what", "in", "to", "of", "the", "on", "or", "it", "a", "an", "how", "and", "does", "its", "at", "capital", "only", "country", "world", "that", "spans", "all", "four", "hemispheres", "where"]
-        words_only = [w for w in cleaned.split() if w not in helpers]
-        web_query = " ".join(words_only) if words_only else cleaned
-        
-        if "italy" in cleaned: web_query = "Italy"
-        if "malta" in cleaned: web_query = "Malta"
-        if "rome" in cleaned: web_query = "Rome"
-        if "hemisphere" in cleaned: web_query = "Kiribati"
-        
-        web_query = web_query.title().strip()
-        print(f"\\n[Internet Sync] Syncing with global database using key term: '{web_query}'...")
-        
-        online_answer = fetch_live_online_answer(web_query)
-        if online_answer:
-            geo_dictionary[cleaned] = online_answer; save_database(geo_dictionary)
-            return f"[Live Encyclopedia Answer]:\\n{online_answer}"
-            
-        return f"[Notice] Could not find or download definitions for: '{cleaned}'"
-    except Exception as e:
-        return f"[System Alert]: Exception intercepted: {e}"
-"""
-    try:
-        exec(final_execution_block, scope_memory)
-        print("✅ [HEAL SUCCESS]: Core system upgraded! Run your geography query again.")
-        return True
-    except Exception as err:
-        print(f"❌ RAM modification was blocked: {err}")
-    return False
-
-def master_fail_safe_boot():
-    print("============================================================")
-    print("🛡️  UNLOCKED AI MEMORY INJECTOR: INITIALIZING ENVIRONMENT")
-    print("============================================================")
-    
-    if not os.path.exists(TARGET):
-        print(f"❌ Error: '{TARGET}' was not found."); return
-        
-    with open(TARGET, "r", encoding="utf-8") as f: 
-        code_content = f.read()
-
-    print("🕵️‍♂️ Phase 1: Validating structural core layout grammar...")
-    try:
-        compiled_bytecode = compile(code_content, TARGET, "exec")
-        print("✅ Phase 1 Complete: Structural base syntax is healthy.\n" + "-"*60)
-        print("🚀 Phase 2: Launching main application environment loop...")
-        
-        runtime_memory_scope = {"__name__": "__main__"}
-        shield_latch = {"active": True}
-        
-        def custom_terminal_monitor(text_to_print):
-            sys.stdout.write(str(text_to_print) + "\n")
-            if "[Notice]" in str(text_to_print) and shield_latch["active"]:
-                shield_latch["active"] = False 
-                force_live_ram_patch(str(text_to_print), runtime_memory_scope)
-
-        runtime_memory_scope["print"] = custom_terminal_monitor
-        exec(compiled_bytecode, runtime_memory_scope)
-
-    except Exception as crash_avalanche:
-        print(f"\n💥 [CRITICAL CRASH INTERCEPTED]: {crash_avalanche}")
-
-if __name__ == "__main__":
+import os  
+import sys  
+import shutil  
+import traceback  
+import json  
+import urllib.request  
+import urllib.parse  
+import urllib.error  
+  
+TARGET = "geo_core.py"          # must match your renamed core file  
+BACKUP = "geo_core.py.bak"  
+MAX_ATTEMPTS = 4  
+  
+# Uses the SAME key your geo_core.py uses, so you only set one variable.  
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"  
+OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  # a :free model  
+  
+  
+def ask_llm_to_fix(broken_source, error_text):  
+    """Send the broken core + traceback to OpenRouter and get corrected source back."""  
+    key = os.environ.get("OPENROUTER_API_KEY", "")  
+    if not key:  
+        print("   [Repair debug] No OPENROUTER_API_KEY set — cannot AI-repair.")  
+        return None  
+  
+    prompt = (  
+        "You are a Python repair tool. The following module crashed. "  
+        "Return ONLY the complete corrected Python source with no markdown "  
+        "fences, no explanation, and no commentary.\n\n"  
+        f"--- TRACEBACK ---\n{error_text}\n\n"  
+        f"--- SOURCE ---\n{broken_source}"  
+    )  
+  
+    body = json.dumps({  
+        "model": OPENROUTER_MODEL,  
+        "messages": [{"role": "user", "content": prompt}],  
+    }).encode("utf-8")  
+  
+    req = urllib.request.Request(OPENROUTER_URL, data=body, method="POST")  
+    req.add_header("Authorization", f"Bearer {key}")  
+    req.add_header("Content-Type", "application/json")  
+  
+    try:  
+        with urllib.request.urlopen(req, timeout=60) as response:  
+            raw = response.read().decode("utf-8")  
+        data = json.loads(raw)  
+        fixed = data["choices"][0]["message"]["content"].strip()  
+        # Strip accidental code fences if the model added them anyway.  
+        if fixed.startswith("```"):  
+            fixed = fixed.split("```", 2)[1]  
+            if fixed.startswith("python"):  
+                fixed = fixed[len("python"):]  
+            fixed = fixed.strip("`").strip()  
+        return fixed if fixed else None  
+    except urllib.error.HTTPError as e:  
+        try:  
+            print(f"   [Repair debug] HTTP {e.code}: {e.read().decode('utf-8')[:300]}")  
+        except Exception:  
+            print(f"   [Repair debug] HTTP {e.code}: {e}")  
+        return None  
+    except Exception as e:  
+        print(f"   [Repair debug] {type(e).__name__}: {e}")  
+        return None  
+  
+  
+def master_fail_safe_boot():  
+    print("============================================================")  
+    print("🛡️  AI SELF-REPAIR SHIELD: INITIALIZING BOOT LOAD")  
+    print("============================================================")  
+  
+    if not os.path.exists(TARGET):  
+        print(f"❌ Error: '{TARGET}' was not found. Put it in this folder.")  
+        return  
+  
+    # Always back up before we ever overwrite the core.  
+    shutil.copyfile(TARGET, BACKUP)  
+    print(f"💾 Backup saved to '{BACKUP}'.")  
+  
+    for attempt in range(1, MAX_ATTEMPTS + 1):  
+        print(f"\n🕵️  Attempt {attempt}/{MAX_ATTEMPTS}: validating and launching core...")  
+        try:  
+            with open(TARGET, "r", encoding="utf-8") as f:  
+                code_content = f.read()  
+  
+            compiled = compile(code_content, TARGET, "exec")  
+            runtime_scope = {"__name__": "__main__"}  
+            exec(compiled, runtime_scope)  
+            return  # clean exit — core ran and returned normally  
+  
+        except Exception:  
+            error_text = traceback.format_exc()  
+            print("\n💥 [CRASH INTERCEPTED]:")  
+            print(error_text)  
+  
+            if attempt == MAX_ATTEMPTS:  
+                print("\n🔁 Attempts exhausted — restoring the original core from backup.")  
+                shutil.copyfile(BACKUP, TARGET)  
+                print(f"↩️  Restored '{TARGET}' from '{BACKUP}'.")  
+                return  
+  
+            print("\n🤖 Requesting an AI fix from OpenRouter...")  
+            fixed_source = ask_llm_to_fix(code_content, error_text)  
+            if not fixed_source:  
+                print("⚠️  No usable fix returned — restoring backup and stopping.")  
+                shutil.copyfile(BACKUP, TARGET)  
+                return  
+  
+            with open(TARGET, "w", encoding="utf-8") as f:  
+                f.write(fixed_source)  
+            print("✅ Wrote AI-corrected core. Retrying...")  
+  
+  
+if __name__ == "__main__":  
     master_fail_safe_boot()
