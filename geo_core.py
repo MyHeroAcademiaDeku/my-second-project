@@ -12,7 +12,7 @@ BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "  
               "Chrome/125.0.0.0 Safari/537.36")  
   
-OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  
+OPENROUTER_MODEL = "ots-studio/dots-3-note-preview:free"  
   
 # Curated offline dictionary (instant, no network). Cached web answers do NOT go here.  
 CURATED_TERMS = {  
