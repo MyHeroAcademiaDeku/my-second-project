@@ -15,7 +15,7 @@ BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "  
               "Chrome/125.0.0.0 Safari/537.36")  
   
-OPENROUTER_MODEL = "dots-studio/dots-3-note-preview:free"  
+OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"  
   
   
 def request_ai_fix(source_code, error_text):  
