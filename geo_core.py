@@ -114,7 +114,7 @@ def looks_like_math(question):
   
   
 def ask_llm(question):  
-    """Primary route: OpenRouter (OpenAI-compatible). Detailed for math, adaptive length otherwise."""  
+    """Primary route: OpenRouter (OpenAI-compatible). Detailed for math, adaptive otherwise."""  
     key = os.environ.get("OPENROUTER_API_KEY", "")  
     if not key:  
         print("   [LLM debug] No OPENROUTER_API_KEY set.")  
@@ -125,10 +125,9 @@ def ask_llm(question):
                       "step-by-step working, and end with a line beginning 'Answer:'.")  
         label = "[Math Solution]"  
     else:  
-        system_msg = ("Answer accurately and directly. Match your length to the "  
-                      "question: give a brief answer for a simple factual question, "  
-                      "and a fuller explanation when the question needs one. "  
-                      "No unnecessary preamble.")  
+        system_msg = ("Answer accurately and concisely. Match the length of your "  
+                      "answer to the complexity of the question: use one sentence "  
+                      "for simple facts, and more when a fuller explanation is needed.")  
         label = "[AI Answer]"  
   
     payload = json.dumps({  
@@ -151,7 +150,17 @@ def ask_llm(question):
     try:  
         with urllib.request.urlopen(req, timeout=30) as response:  
             data = json.loads(response.read().decode("utf-8"))  
-            answer = data["choices"][0]["message"]["content"].strip()  
+            # Guard: OpenRouter can return HTTP 200 with an error/empty body  
+            # (no 'choices'), which previously crashed with KeyError: 'choices'.  
+            choices = data.get("choices")  
+            if not choices:  
+                print(f"   [LLM debug] No 'choices' in response: {data}")  
+                return None  
+            message = choices[0].get("message", {})  
+            answer = (message.get("content") or "").strip()  
+            if not answer:  
+                print(f"   [LLM debug] Empty content in response: {data}")  
+                return None  
             return f"{label}\n{answer}"  
     except urllib.error.HTTPError as e:  
         try:  
