@@ -146,11 +146,6 @@ def ask_llm(question):
     req.add_header("User-Agent", BROWSER_UA)          # <-- added  
     req.add_header("Accept", "application/json")       # <-- added  
   
-    try:  
-        with urllib.request.urlopen(req, timeout=30) as response:  
-            data = json.loads(response.read().decode("utf-8"))  
-            answer = data["choices"][0]["message"]["content"].strip()  
-            return f"{label}\n{answer}"  
     except urllib.error.HTTPError as e:  
         try:  
             body = e.read().decode("utf-8")  
@@ -161,7 +156,6 @@ def ask_llm(question):
     except Exception as e:  
         print(f"   [LLM debug] {type(e).__name__}: {e}")  
         return None  
-  
   
 def ask_wikipedia(query_phrase):  
     """Fallback route: Wikipedia MediaWiki API, parsed with json.loads (accent-safe)."""  
