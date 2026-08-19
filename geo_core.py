@@ -114,7 +114,7 @@ def looks_like_math(question):
   
   
 def ask_llm(question):  
-    """Primary route: OpenRouter (OpenAI-compatible). Short answers, detailed for math."""  
+    """Primary route: OpenRouter (OpenAI-compatible). Detailed for math, adaptive length otherwise."""  
     key = os.environ.get("OPENROUTER_API_KEY", "")  
     if not key:  
         print("   [LLM debug] No OPENROUTER_API_KEY set.")  
@@ -125,8 +125,10 @@ def ask_llm(question):
                       "step-by-step working, and end with a line beginning 'Answer:'.")  
         label = "[Math Solution]"  
     else:  
-        system_msg = ("Answer in a single short, direct sentence. "  
-                      "No preamble, no extra detail.")  
+        system_msg = ("Answer accurately and directly. Match your length to the "  
+                      "question: give a brief answer for a simple factual question, "  
+                      "and a fuller explanation when the question needs one. "  
+                      "No unnecessary preamble.")  
         label = "[AI Answer]"  
   
     payload = json.dumps({  
@@ -143,9 +145,14 @@ def ask_llm(question):
     )  
     req.add_header("Authorization", f"Bearer {key}")  
     req.add_header("Content-Type", "application/json")  
-    req.add_header("User-Agent", BROWSER_UA)          # <-- added  
-    req.add_header("Accept", "application/json")       # <-- added  
+    req.add_header("User-Agent", BROWSER_UA)  
+    req.add_header("Accept", "application/json")  
   
+    try:  
+        with urllib.request.urlopen(req, timeout=30) as response:  
+            data = json.loads(response.read().decode("utf-8"))  
+            answer = data["choices"][0]["message"]["content"].strip()  
+            return f"{label}\n{answer}"  
     except urllib.error.HTTPError as e:  
         try:  
             body = e.read().decode("utf-8")  
@@ -156,6 +163,7 @@ def ask_llm(question):
     except Exception as e:  
         print(f"   [LLM debug] {type(e).__name__}: {e}")  
         return None  
+  
   
 def ask_wikipedia(query_phrase):  
     """Fallback route: Wikipedia MediaWiki API, parsed with json.loads (accent-safe)."""  
@@ -168,7 +176,7 @@ def ask_wikipedia(query_phrase):
     )  
     try:  
         req = urllib.request.Request(url)  
-        req.add_header("User-Agent", BROWSER_UA)       # <-- added  
+        req.add_header("User-Agent", BROWSER_UA)  
         req.add_header("Accept", "application/json")  
         with urllib.request.urlopen(req, timeout=15) as response:  
             raw_bytes = response.read()  
